@@ -1,8 +1,27 @@
 import { AreaType, Coordinates, StreetSegment } from '../types/parking.types';
 import { polylineMidpoint } from '../utils/geo.utils';
+import { TTLCache } from '../utils/cache.utils';
 
 const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
 const EXCLUDED_HIGHWAY_TYPES = 'motorway|footway|cycleway|steps|path|pedestrian';
+
+// Public Overpass instances throttle aggressively and often reject
+// concurrent requests from the same client outright. Street geometry and
+// zoning tags for a given area barely change day to day, so a longer TTL
+// than geocoding is safe here and meaningfully cuts request volume.
+const STREET_DATA_CACHE_TTL_MS = 30 * 60 * 1000;
+const streetDataCache = new TTLCache<StreetSegment[]>(STREET_DATA_CACHE_TTL_MS);
+
+// Round to ~11m precision so requests for effectively the same destination
+// (e.g. re-searching, or two users near the same address) share a cache
+// entry instead of missing on floating-point noise.
+const CACHE_COORDINATE_PRECISION = 4;
+
+function buildCacheKey(center: Coordinates, radiusMeters: number): string {
+  const lat = center.latitude.toFixed(CACHE_COORDINATE_PRECISION);
+  const lon = center.longitude.toFixed(CACHE_COORDINATE_PRECISION);
+  return `${lat},${lon},${radiusMeters}`;
+}
 
 export class StreetDataError extends Error {}
 
@@ -62,36 +81,40 @@ export async function fetchNearbyStreets(
   center: Coordinates,
   radiusMeters: number
 ): Promise<StreetSegment[]> {
-  const query = buildOverpassQuery(center, radiusMeters);
+  const cacheKey = buildCacheKey(center, radiusMeters);
 
-  const response = await fetch(OVERPASS_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
-  });
+  return streetDataCache.getOrSet(cacheKey, async () => {
+    const query = buildOverpassQuery(center, radiusMeters);
 
-  if (!response.ok) {
-    throw new StreetDataError(`Overpass API request failed with status ${response.status}`);
-  }
-
-  const data = (await response.json()) as OverpassResponse;
-
-  const streets: StreetSegment[] = data.elements
-    .filter((el) => el.type === 'way' && el.geometry && el.geometry.length > 1)
-    .map((way) => {
-      const coordinates: Coordinates[] = way.geometry!.map((point) => ({
-        latitude: point.lat,
-        longitude: point.lon,
-      }));
-
-      return {
-        id: `way-${way.id}`,
-        name: way.tags?.name ?? `Unnamed street ${way.id}`,
-        areaType: classifyAreaType(way.tags),
-        coordinates,
-        midpoint: polylineMidpoint(coordinates),
-      };
+    const response = await fetch(OVERPASS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
     });
 
-  return dedupeStreetsByName(streets);
+    if (!response.ok) {
+      throw new StreetDataError(`Overpass API request failed with status ${response.status}`);
+    }
+
+    const data = (await response.json()) as OverpassResponse;
+
+    const streets: StreetSegment[] = data.elements
+      .filter((el) => el.type === 'way' && el.geometry && el.geometry.length > 1)
+      .map((way) => {
+        const coordinates: Coordinates[] = way.geometry!.map((point) => ({
+          latitude: point.lat,
+          longitude: point.lon,
+        }));
+
+        return {
+          id: `way-${way.id}`,
+          name: way.tags?.name ?? `Unnamed street ${way.id}`,
+          areaType: classifyAreaType(way.tags),
+          coordinates,
+          midpoint: polylineMidpoint(coordinates),
+        };
+      });
+
+    return dedupeStreetsByName(streets);
+  });
 }

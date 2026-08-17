@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "Smart Parking Navigation",
+    "slug": "smart-parking-navigation",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartparking.app"
+    },
+    "android": {
+      "package": "com.smartparking.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+        }
+      }
+    }
+  }
+}
