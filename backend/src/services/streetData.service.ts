@@ -93,7 +93,7 @@ export async function fetchNearbyStreets(
         'Content-Type': 'application/x-www-form-urlencoded',
         'User-Agent': USER_AGENT,
       },
-      body: `data=${encodeURIComponent(query)}`,
+      body: new URLSearchParams({ data: query }).toString(),
     });
 
     if (!response.ok) {
