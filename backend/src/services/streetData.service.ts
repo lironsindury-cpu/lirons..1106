@@ -4,6 +4,7 @@ import { TTLCache } from '../utils/cache.utils';
 
 const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
 const EXCLUDED_HIGHWAY_TYPES = 'motorway|footway|cycleway|steps|path|pedestrian';
+const USER_AGENT = 'SmartParkingApp/1.0 (contact@example.com)';
 
 // Public Overpass instances throttle aggressively and often reject
 // concurrent requests from the same client outright. Street geometry and
@@ -88,7 +89,11 @@ export async function fetchNearbyStreets(
 
     const response = await fetch(OVERPASS_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+        'User-Agent': USER_AGENT,
+      },
       body: `data=${encodeURIComponent(query)}`,
     });
 
