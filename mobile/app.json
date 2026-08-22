@@ -14,7 +14,7 @@
       "package": "com.smartparking.app",
       "config": {
         "googleMaps": {
-          "apiKey": "YOUR_ANDROID_GOOGLE_MAPS_API_KEY"
+          "apiKey": "AIzaSyBHcTEg6v84ACLyxAgdx97mzlerQIEiXlM"
         }
       }
     }
