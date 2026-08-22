@@ -1,3 +1,4 @@
+import https from 'node:https';
 import { AreaType, Coordinates, StreetSegment } from '../types/parking.types';
 import { polylineMidpoint } from '../utils/geo.utils';
 import { TTLCache } from '../utils/cache.utils';
@@ -84,6 +85,45 @@ function buildOverpassQuery(center: Coordinates, radiusMeters: number): string {
   `;
 }
 
+// Node's global fetch (undici) auto-attaches browser-style Fetch Metadata
+// headers (Sec-Fetch-Mode, a wildcard Accept-Language, etc.) that curl never
+// sends and that a WAF can use to flag automated clients. Posting via the
+// raw https module instead gives us exact control over the headers sent —
+// only what's listed below, matching a plain curl request.
+function postOverpassQuery(query: string): Promise<{ statusCode: number; body: string }> {
+  const body = new URLSearchParams({ data: query }).toString();
+  const { hostname, pathname } = new URL(OVERPASS_ENDPOINT);
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(
+      {
+        hostname,
+        path: pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': USER_AGENT,
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => chunks.push(chunk));
+        response.on('end', () => {
+          resolve({
+            statusCode: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString('utf-8'),
+          });
+        });
+      }
+    );
+
+    request.on('error', reject);
+    request.write(body);
+    request.end();
+  });
+}
+
 function dedupeStreetsByName(streets: StreetSegment[]): StreetSegment[] {
   const seen = new Map<string, StreetSegment>();
   for (const street of streets) {
@@ -103,23 +143,13 @@ export async function fetchNearbyStreets(
   return streetDataCache.getOrSet(cacheKey, async () => {
     const query = buildOverpassQuery(center, radiusMeters);
 
-    // TEMPORARY DEBUG LOG — remove once the Overpass 406 is diagnosed.
-    console.log('--- Overpass query being sent ---\n' + query + '\n--- end query ---');
+    const { statusCode, body } = await postOverpassQuery(query);
 
-    const response = await fetch(OVERPASS_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': USER_AGENT,
-      },
-      body: new URLSearchParams({ data: query }).toString(),
-    });
-
-    if (!response.ok) {
-      throw new StreetDataError(`Overpass API request failed with status ${response.status}`);
+    if (statusCode !== 200) {
+      throw new StreetDataError(`Overpass API request failed with status ${statusCode}`);
     }
 
-    const data = (await response.json()) as OverpassResponse;
+    const data = JSON.parse(body) as OverpassResponse;
 
     const streets: StreetSegment[] = data.elements
       .filter((el) => el.type === 'way' && el.geometry && el.geometry.length > 1)
