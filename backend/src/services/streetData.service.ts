@@ -98,7 +98,7 @@ const CURL_STATUS_DELIMITER = '\n__OVERPASS_HTTP_STATUS__:';
 // shell or a process argv list.
 function postOverpassQuery(query: string): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const curl = spawn('curl', [
+    const args = [
       '--silent',
       '--show-error',
       '--request',
@@ -110,7 +110,13 @@ function postOverpassQuery(query: string): Promise<{ statusCode: number; body: s
       'data@-',
       '--write-out',
       `${CURL_STATUS_DELIMITER}%{http_code}`,
-    ]);
+    ];
+
+    // TEMPORARY DEBUG LOG — remove once the Overpass 406 is diagnosed.
+    console.log('--- curl args ---\n' + JSON.stringify(args, null, 2));
+    console.log('--- query piped to curl stdin ---\n' + query + '\n--- end query ---');
+
+    const curl = spawn('curl', args);
 
     let stdout = '';
     let stderr = '';
@@ -127,6 +133,11 @@ function postOverpassQuery(query: string): Promise<{ statusCode: number; body: s
     });
 
     curl.on('close', (exitCode) => {
+      // TEMPORARY DEBUG LOG — remove once the Overpass 406 is diagnosed.
+      console.log('--- curl exit code ---\n' + exitCode);
+      console.log('--- curl stderr ---\n' + (stderr || '(empty)'));
+      console.log('--- curl stdout (raw, includes status marker + response body) ---\n' + stdout);
+
       if (exitCode !== 0) {
         reject(new StreetDataError(`curl exited with code ${exitCode} calling Overpass: ${stderr.trim()}`));
         return;
