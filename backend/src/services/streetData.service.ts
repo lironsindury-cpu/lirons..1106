@@ -1,4 +1,4 @@
-import https from 'node:https';
+import { spawn } from 'node:child_process';
 import { AreaType, Coordinates, StreetSegment } from '../types/parking.types';
 import { polylineMidpoint } from '../utils/geo.utils';
 import { TTLCache } from '../utils/cache.utils';
@@ -85,42 +85,67 @@ function buildOverpassQuery(center: Coordinates, radiusMeters: number): string {
   `;
 }
 
-// Node's global fetch (undici) auto-attaches browser-style Fetch Metadata
-// headers (Sec-Fetch-Mode, a wildcard Accept-Language, etc.) that curl never
-// sends and that a WAF can use to flag automated clients. Posting via the
-// raw https module instead gives us exact control over the headers sent —
-// only what's listed below, matching a plain curl request.
+const CURL_STATUS_DELIMITER = '\n__OVERPASS_HTTP_STATUS__:';
+
+// Overpass's WAF blocks this request even with byte-identical HTTP headers
+// sent from Node (fetch or raw node:https) — the traffic still gets a 406
+// that plain curl, run against the exact same endpoint, does not get. That
+// points at TLS client fingerprinting (JA3-style) rather than anything at
+// the HTTP layer: Node's TLS stack and curl's produce different ClientHello
+// fingerprints. Shelling out to curl uses curl's own TLS stack, sidestepping
+// the fingerprint check entirely. The query is piped over stdin (curl's
+// `data@-`) rather than passed as an argument, so it never touches the
+// shell or a process argv list.
 function postOverpassQuery(query: string): Promise<{ statusCode: number; body: string }> {
-  const body = new URLSearchParams({ data: query }).toString();
-  const { hostname, pathname } = new URL(OVERPASS_ENDPOINT);
-
   return new Promise((resolve, reject) => {
-    const request = https.request(
-      {
-        hostname,
-        path: pathname,
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': USER_AGENT,
-          'Content-Length': Buffer.byteLength(body),
-        },
-      },
-      (response) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => {
-          resolve({
-            statusCode: response.statusCode ?? 0,
-            body: Buffer.concat(chunks).toString('utf-8'),
-          });
-        });
-      }
-    );
+    const curl = spawn('curl', [
+      '--silent',
+      '--show-error',
+      '--request',
+      'POST',
+      OVERPASS_ENDPOINT,
+      '--header',
+      `User-Agent: ${USER_AGENT}`,
+      '--data-urlencode',
+      'data@-',
+      '--write-out',
+      `${CURL_STATUS_DELIMITER}%{http_code}`,
+    ]);
 
-    request.on('error', reject);
-    request.write(body);
-    request.end();
+    let stdout = '';
+    let stderr = '';
+
+    curl.stdout.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf-8');
+    });
+    curl.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf-8');
+    });
+
+    curl.on('error', (error) => {
+      reject(new StreetDataError(`Failed to spawn curl for Overpass request: ${error.message}`));
+    });
+
+    curl.on('close', (exitCode) => {
+      if (exitCode !== 0) {
+        reject(new StreetDataError(`curl exited with code ${exitCode} calling Overpass: ${stderr.trim()}`));
+        return;
+      }
+
+      const delimiterIndex = stdout.lastIndexOf(CURL_STATUS_DELIMITER);
+      if (delimiterIndex === -1) {
+        reject(new StreetDataError('Unexpected curl output calling Overpass: missing status marker'));
+        return;
+      }
+
+      resolve({
+        statusCode: Number(stdout.slice(delimiterIndex + CURL_STATUS_DELIMITER.length).trim()),
+        body: stdout.slice(0, delimiterIndex),
+      });
+    });
+
+    curl.stdin.write(query);
+    curl.stdin.end();
   });
 }
 
