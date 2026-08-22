@@ -87,6 +87,9 @@ export async function fetchNearbyStreets(
   return streetDataCache.getOrSet(cacheKey, async () => {
     const query = buildOverpassQuery(center, radiusMeters);
 
+    // TEMPORARY DEBUG LOG — remove once the Overpass 406 is diagnosed.
+    console.log('--- Overpass query being sent ---\n' + query + '\n--- end query ---');
+
     const response = await fetch(OVERPASS_ENDPOINT, {
       method: 'POST',
       headers: {
