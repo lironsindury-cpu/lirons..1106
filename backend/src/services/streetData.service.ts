@@ -3,7 +3,21 @@ import { polylineMidpoint } from '../utils/geo.utils';
 import { TTLCache } from '../utils/cache.utils';
 
 const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
-const EXCLUDED_HIGHWAY_TYPES = 'motorway|footway|cycleway|steps|path|pedestrian';
+
+// Chained ["highway"!="x"] filters rather than a single
+// ["highway"!~"^(a|b|c)$"] regex — semantically identical, but the
+// regex-alternation form (caret, parens, pipes, dollar sign together)
+// gets blocked with a 406 by Overpass's Apache front-end, almost
+// certainly a WAF rule mistaking it for an attack pattern.
+const EXCLUDED_HIGHWAY_TYPES = [
+  'motorway',
+  'footway',
+  'cycleway',
+  'steps',
+  'path',
+  'pedestrian',
+] as const;
+
 const USER_AGENT = 'SmartParkingApp/1.0 (contact@example.com)';
 
 // Public Overpass instances throttle aggressively and often reject
@@ -60,10 +74,12 @@ function classifyAreaType(tags: Record<string, string> | undefined): AreaType {
 }
 
 function buildOverpassQuery(center: Coordinates, radiusMeters: number): string {
+  const exclusionFilters = EXCLUDED_HIGHWAY_TYPES.map((type) => `["highway"!="${type}"]`).join('');
+
   return `
     [out:json][timeout:25];
     way(around:${radiusMeters},${center.latitude},${center.longitude})
-      ["highway"]["highway"!~"^(${EXCLUDED_HIGHWAY_TYPES})$"];
+      ["highway"]${exclusionFilters};
     out body geom;
   `;
 }
