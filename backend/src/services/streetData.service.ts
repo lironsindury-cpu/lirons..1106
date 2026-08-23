@@ -179,6 +179,9 @@ export async function fetchNearbyStreets(
     const { statusCode, body } = await postOverpassQuery(query);
 
     if (statusCode !== 200) {
+      // TEMPORARY DEBUG LOG — remove once the kumi.systems 500 is diagnosed.
+      console.log(`--- Overpass error response body (status ${statusCode}) ---\n` + body);
+
       throw new StreetDataError(`Overpass API request failed with status ${statusCode}`);
     }
 
