@@ -7,18 +7,20 @@ import { TTLCache } from '../utils/cache.utils';
 // blanket 406 in 2026 as part of an anti-scraper filter, independent of
 // anything about the request shape (see drolbr/Overpass-API#791). Public
 // mirrors are independently-run, best-effort community infrastructure and
-// go down or rate-limit on their own schedule, unrelated to each other —
-// kumi.systems in particular has been intermittently 500/502ing — so a
-// single hardcoded endpoint isn't reliable enough; these are tried in order
-// until one succeeds. OVERPASS_API_URL overrides this with a single fixed
+// go down or rate-limit on their own schedule, unrelated to each other, so
+// a single hardcoded endpoint isn't reliable enough; these are tried in
+// order until one succeeds. osm.ch is listed first since it's a genuinely
+// separate server (confirmed via DNS); kumi.systems and private.coffee
+// resolve to the identical host, so only one of them is listed — the other
+// buys nothing. OVERPASS_API_URL overrides this with a single fixed
 // endpoint (no fallback) when set.
 const DEFAULT_OVERPASS_ENDPOINTS = [
+  'https://overpass.osm.ch/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
   'https://api.openstreetmap.fr/oapi/interpreter',
 ];
 
-const OVERPASS_MIRROR_TIMEOUT_SECONDS = 15;
+const OVERPASS_MIRROR_TIMEOUT_SECONDS = 8;
 
 function getOverpassEndpoints(): string[] {
   const override = process.env.OVERPASS_API_URL;
