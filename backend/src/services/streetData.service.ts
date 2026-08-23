@@ -9,15 +9,17 @@ import { TTLCache } from '../utils/cache.utils';
 // mirrors are independently-run, best-effort community infrastructure and
 // go down or rate-limit on their own schedule, unrelated to each other, so
 // a single hardcoded endpoint isn't reliable enough; these are tried in
-// order until one succeeds. osm.ch is listed first since it's a genuinely
-// separate server (confirmed via DNS); kumi.systems and private.coffee
-// resolve to the identical host, so only one of them is listed — the other
-// buys nothing. OVERPASS_API_URL overrides this with a single fixed
-// endpoint (no fallback) when set.
+// order until one succeeds. kumi.systems and private.coffee resolve to the
+// identical host, so only one of them is listed — the other buys nothing.
+// overpass.osm.ch is last, not first: it only has data for Switzerland, so
+// it silently returns zero results for anywhere else — it's a last resort
+// for when the global-coverage mirrors ahead of it are unreachable, not a
+// genuine substitute for them. OVERPASS_API_URL overrides this with a
+// single fixed endpoint (no fallback) when set.
 const DEFAULT_OVERPASS_ENDPOINTS = [
-  'https://overpass.osm.ch/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://api.openstreetmap.fr/oapi/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
 ];
 
 const OVERPASS_MIRROR_TIMEOUT_SECONDS = 8;
