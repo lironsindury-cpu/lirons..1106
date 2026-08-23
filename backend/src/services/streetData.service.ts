@@ -3,7 +3,18 @@ import { AreaType, Coordinates, StreetSegment } from '../types/parking.types';
 import { polylineMidpoint } from '../utils/geo.utils';
 import { TTLCache } from '../utils/cache.utils';
 
-const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
+// overpass-api.de (the default public instance) started rejecting requests
+// with a blanket 406 in 2026 as part of an anti-scraper filter, independent
+// of anything about the request shape — a widely reported, unresolved issue
+// (see drolbr/Overpass-API#791). overpass.kumi.systems is a separate,
+// independently-run mirror with its own infrastructure, so it isn't subject
+// to that block. OVERPASS_API_URL lets ops point at yet another mirror (or
+// back at overpass-api.de) without a code change.
+const DEFAULT_OVERPASS_ENDPOINT = 'https://overpass.kumi.systems/api/interpreter';
+
+function getOverpassEndpoint(): string {
+  return process.env.OVERPASS_API_URL || DEFAULT_OVERPASS_ENDPOINT;
+}
 
 // Chained ["highway"!="x"] filters rather than a single
 // ["highway"!~"^(a|b|c)$"] regex — semantically identical, but the
@@ -87,15 +98,10 @@ function buildOverpassQuery(center: Coordinates, radiusMeters: number): string {
 
 const CURL_STATUS_DELIMITER = '\n__OVERPASS_HTTP_STATUS__:';
 
-// Overpass's WAF blocks this request even with byte-identical HTTP headers
-// sent from Node (fetch or raw node:https) — the traffic still gets a 406
-// that plain curl, run against the exact same endpoint, does not get. That
-// points at TLS client fingerprinting (JA3-style) rather than anything at
-// the HTTP layer: Node's TLS stack and curl's produce different ClientHello
-// fingerprints. Shelling out to curl uses curl's own TLS stack, sidestepping
-// the fingerprint check entirely. The query is piped over stdin (curl's
-// `data@-`) rather than passed as an argument, so it never touches the
-// shell or a process argv list.
+// Posts via curl (spawned as a subprocess) rather than fetch/node:https so
+// the request goes out over curl's own TLS stack and default header set.
+// The query is piped over stdin (curl's `data@-`) rather than passed as an
+// argument, so it never touches the shell or a process argv list.
 function postOverpassQuery(query: string): Promise<{ statusCode: number; body: string }> {
   return new Promise((resolve, reject) => {
     const args = [
@@ -103,7 +109,7 @@ function postOverpassQuery(query: string): Promise<{ statusCode: number; body: s
       '--show-error',
       '--request',
       'POST',
-      OVERPASS_ENDPOINT,
+      getOverpassEndpoint(),
       '--header',
       `User-Agent: ${USER_AGENT}`,
       '--data-urlencode',
@@ -111,10 +117,6 @@ function postOverpassQuery(query: string): Promise<{ statusCode: number; body: s
       '--write-out',
       `${CURL_STATUS_DELIMITER}%{http_code}`,
     ];
-
-    // TEMPORARY DEBUG LOG — remove once the Overpass 406 is diagnosed.
-    console.log('--- curl args ---\n' + JSON.stringify(args, null, 2));
-    console.log('--- query piped to curl stdin ---\n' + query + '\n--- end query ---');
 
     const curl = spawn('curl', args);
 
@@ -133,11 +135,6 @@ function postOverpassQuery(query: string): Promise<{ statusCode: number; body: s
     });
 
     curl.on('close', (exitCode) => {
-      // TEMPORARY DEBUG LOG — remove once the Overpass 406 is diagnosed.
-      console.log('--- curl exit code ---\n' + exitCode);
-      console.log('--- curl stderr ---\n' + (stderr || '(empty)'));
-      console.log('--- curl stdout (raw, includes status marker + response body) ---\n' + stdout);
-
       if (exitCode !== 0) {
         reject(new StreetDataError(`curl exited with code ${exitCode} calling Overpass: ${stderr.trim()}`));
         return;
