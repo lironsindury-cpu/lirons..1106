@@ -174,11 +174,16 @@ function postToEndpoint(endpoint: string, query: string): Promise<{ statusCode: 
 }
 
 // Tries each configured mirror in order, falling through to the next on any
-// failure — network error, --max-time timeout, a non-200 status, an
-// unparseable body, or (for the Switzerland-only mirror specifically) a
-// technically-successful response with zero results, which for that mirror
-// means "outside my coverage area" rather than "no streets here". Only
-// throws once every mirror has failed.
+// failure — network error, --max-time timeout, a non-200 status, or an
+// unparseable body. Only throws once every mirror has failed.
+//
+// TEMPORARILY DISABLED: this used to also treat a 200-with-zero-elements
+// response from the Switzerland-only mirror as a failure (see the commented
+// block below) — correct in principle, since for that mirror it means
+// "outside my coverage area", not "no streets here". Disabled for now since
+// kumi.systems (the mirror ahead of it) is unstable, so requests were
+// landing on the Swiss mirror often and throwing for non-Switzerland
+// addresses, blocking frontend/map testing entirely.
 async function postOverpassQuery(query: string): Promise<OverpassResponse> {
   const endpoints = getOverpassEndpoints();
   const failures: string[] = [];
@@ -203,11 +208,17 @@ async function postOverpassQuery(query: string): Promise<OverpassResponse> {
         continue;
       }
 
-      if (endpoint === OVERPASS_SWISS_ONLY_ENDPOINT && data.elements.length === 0) {
-        console.warn(`Overpass mirror failed: ${endpoint} -> zero results, likely outside its Switzerland-only coverage`);
-        failures.push(`${endpoint} -> zero results (outside Switzerland-only coverage)`);
-        continue;
-      }
+      // TODO: kumi.systems is currently unstable (intermittent 502s/timeouts),
+      // which was pushing most requests down to this Switzerland-only mirror
+      // and throwing on its empty result — blocking frontend/map testing for
+      // areas outside Switzerland entirely. Re-enable this check once
+      // kumi.systems is reliably reachable again:
+      //
+      // if (endpoint === OVERPASS_SWISS_ONLY_ENDPOINT && data.elements.length === 0) {
+      //   console.warn(`Overpass mirror failed: ${endpoint} -> zero results, likely outside its Switzerland-only coverage`);
+      //   failures.push(`${endpoint} -> zero results (outside Switzerland-only coverage)`);
+      //   continue;
+      // }
 
       return data;
     } catch (error) {
