@@ -5,24 +5,23 @@ import { TTLCache } from '../utils/cache.utils';
 
 // overpass-api.de (the original default) started rejecting requests with a
 // blanket 406 in 2026 as part of an anti-scraper filter, independent of
-// anything about the request shape (see drolbr/Overpass-API#791). Public
-// mirrors are independently-run, best-effort community infrastructure and
-// go down or rate-limit on their own schedule, unrelated to each other, so
+// anything about the request shape (see drolbr/Overpass-API#791) — one
+// symptom of an industry-wide AI-scraper load problem hitting public
+// Overpass mirrors generally, not something specific to this app. Public
+// mirrors are independently-run, best-effort community infrastructure, so
 // a single hardcoded endpoint isn't reliable enough; these are tried in
 // order until one succeeds. kumi.systems and private.coffee resolve to the
-// identical host, so only one of them is listed — the other buys nothing.
-// overpass.osm.ch is last, not first: it only has data for Switzerland, so
-// it silently returns zero results for anywhere else — it's a last resort
-// for when the global-coverage mirrors ahead of it are unreachable, not a
-// genuine substitute for them. OVERPASS_API_URL overrides this with a
-// single fixed endpoint (no fallback) when set.
+// identical host, so only one of them is listed. api.openstreetmap.fr
+// (overpass.openstreetmap.fr) has been shut down since 2022-01-29 (OSM
+// wiki: Servers/overpass.openstreetmap.fr) — not a transient failure, so
+// it's not worth carrying as a fallback. overpass.osm.ch is last, not
+// first: it only has data for Switzerland, so it silently returns zero
+// results for anywhere else — it's a last resort for when kumi.systems is
+// unreachable, not a genuine substitute for it. OVERPASS_API_URL overrides
+// this with a single fixed endpoint (no fallback) when set.
 const OVERPASS_SWISS_ONLY_ENDPOINT = 'https://overpass.osm.ch/api/interpreter';
 
-const DEFAULT_OVERPASS_ENDPOINTS = [
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://api.openstreetmap.fr/oapi/interpreter',
-  OVERPASS_SWISS_ONLY_ENDPOINT,
-];
+const DEFAULT_OVERPASS_ENDPOINTS = ['https://overpass.kumi.systems/api/interpreter', OVERPASS_SWISS_ONLY_ENDPOINT];
 
 const OVERPASS_MIRROR_TIMEOUT_SECONDS = 8;
 
