@@ -16,10 +16,12 @@ import { TTLCache } from '../utils/cache.utils';
 // for when the global-coverage mirrors ahead of it are unreachable, not a
 // genuine substitute for them. OVERPASS_API_URL overrides this with a
 // single fixed endpoint (no fallback) when set.
+const OVERPASS_SWISS_ONLY_ENDPOINT = 'https://overpass.osm.ch/api/interpreter';
+
 const DEFAULT_OVERPASS_ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
   'https://api.openstreetmap.fr/oapi/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
+  OVERPASS_SWISS_ONLY_ENDPOINT,
 ];
 
 const OVERPASS_MIRROR_TIMEOUT_SECONDS = 8;
@@ -173,9 +175,12 @@ function postToEndpoint(endpoint: string, query: string): Promise<{ statusCode: 
 }
 
 // Tries each configured mirror in order, falling through to the next on any
-// failure — network error, --max-time timeout, or a non-200 status. Only
+// failure — network error, --max-time timeout, a non-200 status, an
+// unparseable body, or (for the Switzerland-only mirror specifically) a
+// technically-successful response with zero results, which for that mirror
+// means "outside my coverage area" rather than "no streets here". Only
 // throws once every mirror has failed.
-async function postOverpassQuery(query: string): Promise<{ statusCode: number; body: string }> {
+async function postOverpassQuery(query: string): Promise<OverpassResponse> {
   const endpoints = getOverpassEndpoints();
   const failures: string[] = [];
 
@@ -183,13 +188,29 @@ async function postOverpassQuery(query: string): Promise<{ statusCode: number; b
     try {
       const result = await postToEndpoint(endpoint, query);
 
-      if (result.statusCode === 200) {
-        return result;
+      if (result.statusCode !== 200) {
+        const bodySnippet = result.body.trim().slice(0, 300);
+        console.warn(`Overpass mirror failed: ${endpoint} -> HTTP ${result.statusCode}${bodySnippet ? ` body: ${bodySnippet}` : ''}`);
+        failures.push(`${endpoint} -> HTTP ${result.statusCode}`);
+        continue;
       }
 
-      const bodySnippet = result.body.trim().slice(0, 300);
-      console.warn(`Overpass mirror failed: ${endpoint} -> HTTP ${result.statusCode}${bodySnippet ? ` body: ${bodySnippet}` : ''}`);
-      failures.push(`${endpoint} -> HTTP ${result.statusCode}`);
+      let data: OverpassResponse;
+      try {
+        data = JSON.parse(result.body) as OverpassResponse;
+      } catch {
+        console.warn(`Overpass mirror failed: ${endpoint} -> invalid JSON response`);
+        failures.push(`${endpoint} -> invalid JSON response`);
+        continue;
+      }
+
+      if (endpoint === OVERPASS_SWISS_ONLY_ENDPOINT && data.elements.length === 0) {
+        console.warn(`Overpass mirror failed: ${endpoint} -> zero results, likely outside its Switzerland-only coverage`);
+        failures.push(`${endpoint} -> zero results (outside Switzerland-only coverage)`);
+        continue;
+      }
+
+      return data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`Overpass mirror failed: ${endpoint} -> ${message}`);
@@ -219,9 +240,7 @@ export async function fetchNearbyStreets(
   return streetDataCache.getOrSet(cacheKey, async () => {
     const query = buildOverpassQuery(center, radiusMeters);
 
-    const { body } = await postOverpassQuery(query);
-
-    const data = JSON.parse(body) as OverpassResponse;
+    const data = await postOverpassQuery(query);
 
     const streets: StreetSegment[] = data.elements
       .filter((el) => el.type === 'way' && el.geometry && el.geometry.length > 1)
