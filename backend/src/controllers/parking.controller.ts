@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { geocodeAddress } from '../services/geocoding.service';
-import { fetchNearbyStreets } from '../services/streetData.service';
-import { currentTimeContext, scoreStreets } from '../services/parkingScore.service';
+import { fetchNearbyParkingFacilities } from '../services/parkingFacilities.service';
+import { scoreParkingFacilities } from '../services/parkingScore.service';
 import { ParkingPredictionResponse } from '../types/parking.types';
 
 const DEFAULT_RADIUS_METERS = 500;
@@ -26,15 +26,14 @@ export async function getParkingPrediction(req: Request, res: Response, next: Ne
     const radiusMeters = parseRadius(req.query.radius);
 
     const destination = await geocodeAddress(address);
-    const streets = await fetchNearbyStreets(destination.coordinates, radiusMeters);
-    const timeContext = currentTimeContext();
-    const scoredStreets = scoreStreets(streets, destination.coordinates, radiusMeters, timeContext);
+    const facilities = await fetchNearbyParkingFacilities(destination.coordinates, radiusMeters);
+    const scoredFacilities = scoreParkingFacilities(facilities, destination.coordinates, radiusMeters);
 
     const payload: ParkingPredictionResponse = {
       destination,
       radiusMeters,
       generatedAt: new Date().toISOString(),
-      streets: scoredStreets,
+      parkingFacilities: scoredFacilities,
     };
 
     res.status(200).json(payload);

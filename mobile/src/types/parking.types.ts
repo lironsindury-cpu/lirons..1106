@@ -1,5 +1,3 @@
-export type AreaType = 'commercial' | 'residential' | 'mixed';
-
 export interface Coordinates {
   latitude: number;
   longitude: number;
@@ -10,26 +8,24 @@ export interface GeocodingResult {
   coordinates: Coordinates;
 }
 
-export type ParkingPotential = 'high' | 'medium' | 'low';
-
-export interface ScoredStreet {
+export interface ParkingFacility {
   id: string;
   name: string;
-  areaType: AreaType;
-  coordinates: Coordinates[];
+  location: Coordinates;
+  address?: string;
+}
+
+export type ParkingPotential = 'high' | 'medium' | 'low';
+
+export interface ScoredParkingFacility extends ParkingFacility {
   distanceMeters: number;
   score: number;
   potential: ParkingPotential;
-  breakdown: {
-    availabilityScore: number;
-    proximityScore: number;
-    occupancyRate: number;
-  };
 }
 
 export interface ParkingPredictionResponse {
   destination: GeocodingResult;
   radiusMeters: number;
   generatedAt: string;
-  streets: ScoredStreet[];
+  parkingFacilities: ScoredParkingFacility[];
 }

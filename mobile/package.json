@@ -10,12 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "react": "18.2.0",
-    "react-native": "0.74.3",
-    "react-native-maps": "1.14.0"
+    "expo": "^54.0.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-maps": "1.20.1"
   },
   "devDependencies": {
-    "@types/react": "~18.2.79",
+    "@babel/core": "^7.24.0",
+    "@types/react": "~19.1.0",
+    "babel-preset-expo": "~54.0.12",
     "typescript": "^5.5.3"
   }
 }
