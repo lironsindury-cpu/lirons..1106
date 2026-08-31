@@ -21,23 +21,6 @@ export function haversineDistanceMeters(a: Coordinates, b: Coordinates): number 
   return EARTH_RADIUS_METERS * c;
 }
 
-export function polylineMidpoint(points: Coordinates[]): Coordinates {
-  const latitude = points.reduce((sum, p) => sum + p.latitude, 0) / points.length;
-  const longitude = points.reduce((sum, p) => sum + p.longitude, 0) / points.length;
-  return { latitude, longitude };
-}
-
-export function minDistanceToPolyline(point: Coordinates, line: Coordinates[]): number {
-  let min = Infinity;
-  for (const vertex of line) {
-    const distance = haversineDistanceMeters(point, vertex);
-    if (distance < min) {
-      min = distance;
-    }
-  }
-  return min;
-}
-
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }

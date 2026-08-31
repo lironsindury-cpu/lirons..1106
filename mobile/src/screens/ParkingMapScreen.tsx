@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Region } from 'react-native-maps';
 import { AddressSearchBar } from '../components/AddressSearchBar';
-import { ParkingStreetsMap } from '../components/ParkingStreetsMap';
+import { ParkingFacilitiesMap } from '../components/ParkingFacilitiesMap';
 import { useParkingPrediction } from '../hooks/useParkingPrediction';
 
 const DEFAULT_REGION: Region = {
@@ -30,7 +30,7 @@ export function ParkingMapScreen() {
       <AddressSearchBar onSearch={search} isLoading={isLoading} />
       {error && <Text style={styles.error}>{error}</Text>}
       {isLoading && <ActivityIndicator style={styles.loader} size="large" />}
-      <ParkingStreetsMap region={region} streets={data?.streets ?? []} />
+      <ParkingFacilitiesMap region={region} facilities={data?.parkingFacilities ?? []} />
     </View>
   );
 }

@@ -33,9 +33,9 @@ function normalizeAddressKey(address: string): string {
 }
 
 function getApiKey(): string {
-  const apiKey = process.env.GOOGLE_GEOCODING_API_KEY;
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   if (!apiKey) {
-    throw new GeocodingError('GOOGLE_GEOCODING_API_KEY environment variable is not set');
+    throw new GeocodingError('GOOGLE_MAPS_API_KEY environment variable is not set');
   }
   return apiKey;
 }
